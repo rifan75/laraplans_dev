@@ -3,10 +3,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [UNRELEASED]
+## [unreleased]
+
+### Added
+
+- Carbon 2
+- Method `Gerardojbaez\Laraplans\Models\PlanSubscription::scopeExcludeCanceled`
+- Method `Gerardojbaez\Laraplans\Models\PlanSubscription::scopeExcludeImmediatelyCanceled`
+
+## [3.0.0] - 2020-05-25
 
 ### Added
 - Now the subscription returned by the `subscription()` method in the `PlanSubscriber` trait is resolved by a class compatible with `Gerardojbaez\Laraplans\Contracts\SubscriptionResolverInterface`. Default resolver is `Gerardojbaez\Laraplans\SubscriptionResolver`. Behavior and logic not changed. [Documentation](https://laraplans.readthedocs.io/en/latest/usage.html#subscription-resolving).
+- `Gerardojbaez\Laraplans\Events\SubscriptionSaved`
+- `Gerardojbaez\Laraplans\Events\SubscriptionSaving`
+
+### Changed
+- Now using `Event::dispatch()` instead of `Event::fire()`. PR #49. Requires **Laravel 5.8 or newer.**
+
+### Removed
+- Method `Gerardojbaez\Laraplans\Models\PlanSubscription::boot()`, logic was moved to event listeners.
 
 ## [2.2.0] - 2018-02-23
 

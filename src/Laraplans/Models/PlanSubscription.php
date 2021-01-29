@@ -2,18 +2,20 @@
 
 namespace Gerardojbaez\Laraplans\Models;
 
-use DB;
-use App;
 use Carbon\Carbon;
 use LogicException;
 use Gerardojbaez\Laraplans\Period;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Database\Eloquent\Model;
 use Gerardojbaez\Laraplans\Models\PlanFeature;
 use Gerardojbaez\Laraplans\SubscriptionAbility;
 use Gerardojbaez\Laraplans\Traits\BelongsToPlan;
 use Gerardojbaez\Laraplans\Contracts\PlanInterface;
+use Gerardojbaez\Laraplans\Events\SubscriptionSaved;
 use Gerardojbaez\Laraplans\SubscriptionUsageManager;
+use Gerardojbaez\Laraplans\Events\SubscriptionSaving;
 use Gerardojbaez\Laraplans\Events\SubscriptionCreated;
 use Gerardojbaez\Laraplans\Events\SubscriptionRenewed;
 use Gerardojbaez\Laraplans\Events\SubscriptionCanceled;
@@ -67,40 +69,24 @@ class PlanSubscription extends Model implements PlanSubscriptionInterface
     ];
 
     /**
+     * The event map for the model.
+     *
+     * Allows for object-based events for native Eloquent events.
+     *
+     * @var array
+     */
+    protected $dispatchesEvents = [
+        'created' => SubscriptionCreated::class,
+        'saving' => SubscriptionSaving::class,
+        'saved' => SubscriptionSaved::class,
+    ];
+
+    /**
      * Subscription Ability Manager instance.
      *
      * @var Gerardojbaez\Laraplans\SubscriptionAbility
      */
     protected $ability;
-
-    /**
-     * Boot function for using with User Events.
-     *
-     * @todo Move events to an Observer.
-     * @return void
-     */
-    protected static function boot()
-    {
-        parent::boot();
-
-        static::created(function ($model) {
-            Event::dispatch(new SubscriptionCreated($model));
-        });
-
-        static::saving(function ($model) {
-            // Set period if it wasn't set
-            if (! $model->ends_at) {
-                $model->setNewPeriod();
-            }
-        });
-
-        static::saved(function ($model) {
-            // check if there is a plan and it is changed
-            if ($model->getOriginal('plan_id') && $model->getOriginal('plan_id') !== $model->plan_id) {
-                event(new SubscriptionPlanChanged($model));
-            }
-        });
-    }
 
     /**
      * Get the subscribable of the model.
@@ -202,7 +188,7 @@ class PlanSubscription extends Model implements PlanSubscriptionInterface
     {
         $endsAt = Carbon::instance($this->ends_at);
 
-        return Carbon::now()->gt($endsAt) or Carbon::now()->eq($endsAt);
+        return Carbon::now()->gte($endsAt);
     }
 
     /**
@@ -355,6 +341,29 @@ class PlanSubscription extends Model implements PlanSubscriptionInterface
     }
 
     /**
+     * Scope not canceled subscriptions.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeExcludeCanceled($query)
+    {
+        return $query->whereNull('canceled_at');
+    }
+
+    /**
+     * Scope not immediately canceled subscriptions.
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeExcludeImmediatelyCanceled($query)
+    {
+        return $query->whereNull('canceled_immediately')
+            ->orWhere('canceled_immediately', 0);
+    }
+
+    /**
      * Find ended subscriptions.
      *
      * @return \Illuminate\Database\Eloquent\Builder
@@ -372,7 +381,7 @@ class PlanSubscription extends Model implements PlanSubscriptionInterface
      * @param  string $start Start date
      * @return  $this
      */
-    protected function setNewPeriod($interval = '', $interval_count = '', $start = '')
+    public function setNewPeriod($interval = '', $interval_count = '', $start = '')
     {
         if (empty($interval)) {
             $interval = $this->plan->interval;
